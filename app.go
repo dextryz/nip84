@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"log"
 	"os"
 	"sync"
@@ -19,6 +20,12 @@ var KindHighlight = 9802
 type Config struct {
 	Nsec   string   `json:"nsec"`
 	Relays []string `json:"relays"`
+}
+
+type Highlight struct {
+	Content string `json:"content"`
+	Context string `json:"context"`
+	Url     string `json:"url"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -37,7 +44,7 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-func Publish(ctx context.Context, cfg *Config, content, context, url string) error {
+func Publish(ctx context.Context, cfg *Config, h Highlight) error {
 
 	var sk string
 	var pub string
@@ -51,21 +58,19 @@ func Publish(ctx context.Context, cfg *Config, content, context, url string) err
 	}
 
 	e := nostr.Event{
-		Kind:      nostr.KindTextNote,
+		Kind:      KindHighlight,
 		PubKey:    pub,
-		Content:   content,
+		Content:   h.Content,
 		CreatedAt: nostr.Now(),
 		Tags: nostr.Tags{
-			{"r", url},
-			//{"context", context},
+			{"r", h.Url},
+			{"context", h.Context},
 		},
 	}
-    err := e.Sign(sk)
+	err := e.Sign(sk)
 	if err != nil {
 		return err
 	}
-
-    log.Println(e)
 
 	var wg sync.WaitGroup
 	for _, r := range cfg.Relays {
@@ -90,7 +95,7 @@ func Publish(ctx context.Context, cfg *Config, content, context, url string) err
 	}
 	wg.Wait()
 
-	log.Printf("Job request sent to Shipyard DVM")
+	log.Printf("Highlighted event published to nostr relays")
 
 	return nil
 }
@@ -107,15 +112,18 @@ func Main() error {
 		return err
 	}
 
-	args := os.Args[1:]
+	h := Highlight{}
+
+	flag.StringVar(&h.Content, "content", "", "event text note of Kind 1")
+	flag.StringVar(&h.Context, "context", "", "event text note of Kind 1")
+	flag.StringVar(&h.Url, "url", "", "event text note of Kind 1")
+
+	flag.Parse()
+	log.SetFlags(0)
 
 	ctx := context.Background()
 
-    content := args[0]
-    context := args[1]
-    url := args[2]
-
-	err = Publish(ctx, cfg, content, context, url)
+	err = Publish(ctx, cfg, h)
 	if err != nil {
 		return err
 	}
