@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -23,9 +24,11 @@ type Config struct {
 }
 
 type Highlight struct {
-	Content string `json:"content"`
-	Context string `json:"context"`
-	Url     string `json:"url"`
+	Content  string `json:"content"`
+	Context  string `json:"context"`
+	Url      string `json:"url"`
+	TextNote string `json:"textnote"`
+	Article  string `json:"article"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -57,20 +60,55 @@ func Publish(ctx context.Context, cfg *Config, h Highlight) error {
 		return err
 	}
 
+	tags := nostr.Tags{
+		{"context", h.Context},
+	}
+
+	// TODO: Make sure it is a correct URL
+	if h.Url != "" {
+		tags = append(tags, nostr.Tag{"r", h.Url})
+	}
+
+	// TODO: Process naddr, note, nevent strings
+	if h.TextNote != "" {
+		tags = append(tags, nostr.Tag{"e", h.TextNote})
+	}
+
+	// TODO: Process naddr, note, nevent strings
+	if h.Article != "" {
+
+		prefix, data, err := nip19.Decode(h.Article)
+		if err != nil {
+			return err
+		}
+		if prefix != "naddr" {
+			return err
+		}
+		ep := data.(nostr.EntityPointer)
+
+		if ep.Kind != nostr.KindArticle {
+			return err
+		}
+
+		log.Println(ep)
+
+		v := fmt.Sprintf("%d:%s", ep.Kind, ep.PublicKey)
+		tags = append(tags, nostr.Tag{"a", v})
+	}
+
 	e := nostr.Event{
 		Kind:      KindHighlight,
 		PubKey:    pub,
 		Content:   h.Content,
 		CreatedAt: nostr.Now(),
-		Tags: nostr.Tags{
-			{"r", h.Url},
-			{"context", h.Context},
-		},
+		Tags:      tags,
 	}
 	err := e.Sign(sk)
 	if err != nil {
 		return err
 	}
+
+	log.Println(e)
 
 	var wg sync.WaitGroup
 	for _, r := range cfg.Relays {
@@ -95,7 +133,7 @@ func Publish(ctx context.Context, cfg *Config, h Highlight) error {
 	}
 	wg.Wait()
 
-	log.Printf("Highlighted event published to nostr relays")
+	log.Printf("Highlight published to nostr relays")
 
 	return nil
 }
@@ -117,6 +155,8 @@ func Main() error {
 	flag.StringVar(&h.Content, "content", "", "event text note of Kind 1")
 	flag.StringVar(&h.Context, "context", "", "event text note of Kind 1")
 	flag.StringVar(&h.Url, "url", "", "event text note of Kind 1")
+	flag.StringVar(&h.TextNote, "textnote", "", "event text note of Kind 1")
+	flag.StringVar(&h.Article, "article", "", "event text note of Kind 1")
 
 	flag.Parse()
 	log.SetFlags(0)
