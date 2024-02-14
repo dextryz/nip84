@@ -10,18 +10,12 @@ import (
 	"os"
 	"sync"
 
+	nos "github.com/dextryz/nostr"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
 var ErrNotFound = errors.New("todo list not found")
-
-var KindHighlight = 9802
-
-type Config struct {
-	Nsec   string   `json:"nsec"`
-	Relays []string `json:"relays"`
-}
 
 type Highlight struct {
 	Content  string `json:"content"`
@@ -30,24 +24,11 @@ type Highlight struct {
 	TextNote string `json:"textnote"`
 	Article  string `json:"article"`
 }
-
-func LoadConfig(path string) (*Config, error) {
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatalf("Config file: %v", err)
-	}
-
-	var cfg Config
-	err = json.Unmarshal(data, &cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return &cfg, nil
+func (s *Article) ReqHighlights(cfg *nos.Config, naddr string) (*nostr.Event, error) {
 }
 
-func Publish(ctx context.Context, cfg *Config, h Highlight) error {
+
+func Publish(ctx context.Context, cfg *nos.Config, h Highlight) error {
 
 	var sk string
 	var pub string
@@ -92,12 +73,12 @@ func Publish(ctx context.Context, cfg *Config, h Highlight) error {
 
 		log.Println(ep)
 
-		v := fmt.Sprintf("%d:%s", ep.Kind, ep.PublicKey)
+        v := fmt.Sprintf("%d:%s:%s", ep.Kind, ep.PublicKey, ep.Identifier)
 		tags = append(tags, nostr.Tag{"a", v})
 	}
 
 	e := nostr.Event{
-		Kind:      KindHighlight,
+		Kind:      nos.KindHighlight,
 		PubKey:    pub,
 		Content:   h.Content,
 		CreatedAt: nostr.Now(),
@@ -145,7 +126,7 @@ func Main() error {
 		log.Fatalln("NOSTR env var not set")
 	}
 
-	cfg, err := LoadConfig(path)
+	cfg, err := nos.LoadConfig(path)
 	if err != nil {
 		return err
 	}
